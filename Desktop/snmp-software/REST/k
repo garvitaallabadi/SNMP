@@ -1,0 +1,4 @@
+STR=$(ps aux | grep "./out 1234" | grep -Eo '[0-9]{3,6}')
+arr=(${STR/ })
+echo "Killing ${arr[0]}"
+kill ${arr[0]}

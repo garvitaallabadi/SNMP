@@ -1,0 +1,106 @@
+#include <iostream>
+#include <string.h>
+#include <pqxx/pqxx> 
+#include "sha256.h"
+#include <time.h>
+
+using namespace std;
+using namespace pqxx;
+//Check database if username is present and the hash of the password matches. Compute the hash using the same logic as in the repository
+// If everything above is ok, then generate a token using the username, and current time.
+// Store or replace the token in the db with an expiry time for the user
+// Return the token as this function
+
+
+string generatehash(string mac){
+	string output1,salt="digivjay";
+	for(int i=0; i< 1000; i++){
+		output1 = sha256(output1 + mac + salt);
+	}
+	return output1;
+}
+
+string hashtoken(string inpUser,time_t curr_time){
+	string output1,salt="digivjay";
+	for(int i=0; i< 1000; i++){
+		output1 = sha256(output1 + inpUser  + salt);
+	}
+	return output1;
+}
+
+string generatetoken(string inpUsername,string inpPassword){
+	char *sql,*sql2;
+	string token;   
+	try{
+		connection C("dbname=testdb user=postgres password=harkirat \
+	      	hostaddr=127.0.0.1 port=5432");
+      		if (!C.is_open()) {
+        		cout << "Can't open database" << endl;
+      		}
+
+		sql = (char*)"SELECT username,password from users";
+
+		nontransaction N(C);      
+
+        	result R( N.exec( sql ));
+      
+        	/* List down all the records */
+		int userFlag = 0, passFlag =0;
+        	for (result::const_iterator c = R.begin(); c != R.end(); ++c) {
+			const char* resultStr = c[0].c_str();
+	   		const char* resultPass = c[1].as<string>().c_str();		
+	   		if (strcmp(inpUsername,resultStr)==0){
+				userFlag=1;
+				/*username matches with c[0], Now hash the password string and verify the password*/
+				string hashedPass = generatehash(inpPassword);
+				if (strcmp(hashedPass,resultPass)==0){
+					passFlag=1;
+				}
+				break;
+	   		}
+        	}// for loop ends
+		if(userFlag ==0)
+		{	cout<<"Username not found"<<endl;
+			return NULL;
+		}
+		else if(userFlag ==1 && passFlag ==0)
+		{
+			cout<<"Invalid Password"<<endl;
+			return NULL;
+		}
+		else if(userFlag ==1 && passFlag ==1)
+		{
+			time_t curr_sec;
+			time_t expiration_time;
+	
+			curr_sec = time (NULL);
+			expiration_time =  curr_sec +1200; //expiration time is set as 20mins i.e 1200secs later than the current epoch time
+		
+			token = hashtoken(inpUsername,curr_sec);
+			sql2 = (char*)"INSERT INTO tokenTable (username,token,expiration) "  \
+	                	"VALUES (:inpUsername, :token, :expirationtime);";	
+	
+			/* Create a transactional object. */
+	      		work W(C);
+      
+	      		/* Execute SQL query */
+	     	 	W.exec( sql2 );
+	      		W.commit();
+	      		cout << "Records created successfully" << endl;
+		
+		}
+		C.disconnect();
+		return token;
+	}
+	catch (const std::exception &e){	
+      	cerr << e.what() << std::endl;
+   	}
+
+}
+
+int main(int argc, char* argv[])
+{
+
+
+
+}
